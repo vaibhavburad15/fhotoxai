@@ -83,7 +83,7 @@ const AttendeeDashboard = () => {
                         }
 
                             try {
-                                const photoData = await attendeeAPI.getPhotos(attendeeId, eventId, true);
+                                const photoData = await attendeeAPI.getPhotos(attendeeId, eventId);
                                 if (photoData.status === 'success') {
                                     const formattedFaces = (photoData.faces || []).map(f => ({
                                         ...f,
@@ -247,7 +247,7 @@ const AttendeeDashboard = () => {
             // If attendee ID route, we can try to get all from standard getClusterFaces or getPhotos
             if (clusterId.startsWith('attendee-')) {
                 const attendeeId = clusterId.replace('attendee-', '');
-                const photoData = await attendeeAPI.getPhotos(attendeeId, eventId, true);
+                const photoData = await attendeeAPI.getPhotos(attendeeId, eventId);
                 fullUrls = (photoData.faces || []).map(f => {
                     const url = f.photo_url || f.url || f.thumbnail_url;
                     return url.startsWith('http') ? url : getPhotoUrl(url);

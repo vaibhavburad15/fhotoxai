@@ -4,7 +4,6 @@ import string
 import json
 import logging
 import qrcode
-from PIL import Image, ImageDraw, ImageFont
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException
 from typing import Optional, List
 
@@ -118,9 +117,10 @@ async def create_event(
         # QR Code
         qr_dir = os.path.join(BASE_DIR, "uploads", "qrcodes")
         os.makedirs(qr_dir, exist_ok=True)
-        img = qrcode.make(f"{FRONTEND_URL}/attendee/access?eventId={event_id}").convert('RGB')
+        img = qrcode.make(f"{FRONTEND_URL}/attendee/access?eventId={event_id}")
         qr_path = f"/uploads/qrcodes/event_{event_id}_qr.png"
-        img.save(os.path.join(BASE_DIR, qr_path.lstrip('/')))
+        with open(os.path.join(BASE_DIR, qr_path.lstrip('/')), "wb") as qr_file:
+            img.save(qr_file)
         execute_update_safely("UPDATE events SET qr_code_path = %s WHERE id = %s", (qr_path, event_id))
 
         # Notify Photographers
@@ -136,7 +136,7 @@ async def create_event(
                 owner_email, 
                 name,
                 date,
-                time,
+                time or "",
                 location,
                 f"{FRONTEND_URL}/organizer/dashboard"
             )

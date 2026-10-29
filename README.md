@@ -27,8 +27,6 @@ FhotoxAI is an event photo discovery platform that aims to simplify how event ph
 
 At large events, photographs are often distributed across multiple albums, making it difficult for attendees to find images featuring them. FhotoxAI addresses this discovery problem through an event-focused workflow and AI-assisted photo processing.
 
-The platform also introduces a **video-to-photo workflow**, allowing supported video uploads to be processed into individual frames that can be reviewed and used as photographs.
-
 The goal is to make event photography more accessible for attendees while providing organizers and photographers with a streamlined digital workspace.
 
 ## Key Features
@@ -37,13 +35,6 @@ The goal is to make event photography more accessible for attendees while provid
 - Designed to help attendees locate relevant event photographs.
 - Supports an event-centered photo discovery workflow.
 - Provides a foundation for AI-based image analysis and photo organization.
-
-### Video-to-Photo Frame Extraction
-- Upload supported video files for processing.
-- Extract individual frames from video footage.
-- Process extracted frames through the application's photo workflow.
-- Separate video-processing responsibilities into dedicated backend services.
-- Support asynchronous processing where implemented by the application.
 
 ### Event Management
 - Dedicated workflows for event organizers.
@@ -68,8 +59,6 @@ The goal is to make event photography more accessible for attendees while provid
 
 ### Backend and Infrastructure
 - API-based communication between frontend and backend.
-- Dedicated video-processing modules.
-- Database migration support.
 - Docker-based development and service orchestration.
 
 > **Note:** Face matching, automated identification, background processing, and other AI capabilities depend on the implementation and configuration available in the current version. Verify each feature before describing it as production-ready.
@@ -78,12 +67,8 @@ The goal is to make event photography more accessible for attendees while provid
 
 ```mermaid
 flowchart TD
-    A[Event Organizer or Photographer] --> B[Upload Photos or Video]
-    B --> C{Media Type}
-    C -->|Photos| D[Photo Processing Workflow]
-    C -->|Video| E[Video Processing Service]
-    E --> F[Extract Video Frames]
-    F --> D
+    A[Event Organizer or Photographer] --> B[Upload Photos]
+    B --> D[Photo Processing Workflow]
     D --> G[AI-Assisted Analysis]
     G --> H[Organize Event Media]
     H --> I[Attendee Photo Discovery]
@@ -93,7 +78,7 @@ flowchart TD
     classDef result fill:#d1fae5,stroke:#059669,color:#064e3b
 
     class A,B user
-    class C,D,E,F,G,H process
+    class D,G,H process
     class I result
 ```
 
@@ -108,9 +93,8 @@ The diagram represents the intended workflow. The exact processing sequence depe
 | Frontend styling | CSS and modular stylesheets |
 | Backend API | Python and FastAPI |
 | API routing | FastAPI routers |
-| Video processing | FFmpeg-based processing |
 | Containerization | Docker and Docker Compose |
-| Database | Configured through the backend and migrations |
+| Database | PostgreSQL (schema in `backend/commons/schema.sql`) |
 
 Additional libraries and services should be documented according to the dependencies and configuration actually present in the repository.
 
@@ -121,23 +105,13 @@ fhotoxai/
 ├── backend/
 │   ├── general_api/
 │   │   ├── routers/
-│   │   │   ├── photos.py
-│   │   │   └── videos.py
+│   │   │   └── photos.py
 │   │   ├── services/
-│   │   │   ├── video_config.py
-│   │   │   ├── video_ffmpeg.py
-│   │   │   ├── video_frame_analysis.py
-│   │   │   ├── video_store.py
-│   │   │   └── video_worker.py
 │   │   ├── Dockerfile
 │   │   └── main.py
-│   ├── migrations/
 │   ├── scripts/
-│   │   └── apply_migrations.py
-│   ├── tests/
 │   └── .env.example
 ├── docs/
-│   └── VIDEO_TO_PHOTO.md
 ├── frontend/
 │   ├── public/
 │   └── src/
@@ -148,7 +122,6 @@ fhotoxai/
 │       ├── utils/
 │       ├── App.jsx
 │       └── main.jsx
-├── compose.override.yaml
 ├── docker-compose.yml
 └── README.md
 ```
@@ -228,34 +201,6 @@ docker compose down
 
 This stops and removes the Compose containers and network. Persistent volumes are normally retained unless explicitly removed.
 
-## Video-to-Photo Feature
-
-The video-to-photo functionality extends the platform beyond individual image uploads.
-
-### Processing Workflow
-
-1. The user selects a supported video file.
-2. The frontend sends the video to the backend API.
-3. The backend validates the upload and initiates processing.
-4. The video-processing service uses FFmpeg to extract frames.
-5. Extracted frames are made available to the configured photo workflow.
-6. The frontend displays the resulting content according to the implemented processing and storage flow.
-
-### Implementation Areas
-
-| Area | Responsibility |
-|---|---|
-| `routers/videos.py` | Video-related API endpoints |
-| `services/video_config.py` | Video-processing configuration |
-| `services/video_ffmpeg.py` | FFmpeg integration |
-| `services/video_frame_analysis.py` | Frame-analysis workflow |
-| `services/video_store.py` | Video-related storage operations |
-| `services/video_worker.py` | Processing worker logic |
-| `utils/videoApi.js` | Frontend video API integration |
-| `docs/VIDEO_TO_PHOTO.md` | Feature documentation |
-
-The exact endpoint paths, supported formats, extraction interval, file-size limits, and processing behavior should be taken from the implementation documentation.
-
 ## Testing
 
 Before submitting changes or deploying the application, verify the following:
@@ -263,10 +208,7 @@ Before submitting changes or deploying the application, verify the following:
 - [ ] The frontend builds and starts successfully.
 - [ ] The backend starts and its health checks pass.
 - [ ] Existing photo upload and discovery workflows remain functional.
-- [ ] Supported video files can be uploaded.
-- [ ] Video frames are extracted correctly.
 - [ ] Invalid files and unsupported formats are handled safely.
-- [ ] Database migrations execute successfully.
 - [ ] Processing errors are logged and handled appropriately.
 - [ ] No secrets or private user data are included in the repository.
 
@@ -274,13 +216,13 @@ Run the test commands documented in the project configuration. For example, insp
 
 ## Security and Privacy
 
-Media applications may handle personal photographs and videos. The implementation should:
+Media applications may handle personal photographs. The implementation should:
 
 - Validate file types and file sizes.
 - Avoid exposing uploaded media without authorization.
 - Keep credentials in environment variables or a secret manager.
 - Restrict access to event and user data.
-- Handle temporary files and extracted frames appropriately.
+- Handle temporary files appropriately.
 - Apply suitable upload, storage, and retention policies.
 - Avoid logging sensitive media data or credentials.
 
@@ -320,8 +262,6 @@ Do not include secrets, local environment files, generated media, or unrelated c
 
 Potential areas for future development include:
 
-- Improved video frame selection and duplicate-frame reduction.
-- More efficient processing for large video uploads.
 - Progress tracking for long-running jobs.
 - Better photo organization and search.
 - Improved accessibility and mobile usability.
@@ -332,7 +272,7 @@ These are potential improvements, not commitments to specific release dates.
 
 ## Documentation
 
-- [Video-to-Photo Documentation](docs/VIDEO_TO_PHOTO.md)
+- [System Architecture](docs/system_architecture.md)
 - [GitHub Repository](https://github.com/vaibhavburad15/fhotoxai)
 
 ## License

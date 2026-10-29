@@ -20,11 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gcc \
     g++ \
-    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
-
-# ffprobe/ffmpeg sanity check (fails the build early if missing)
-RUN ffmpeg -version | head -n 1 && ffprobe -version | head -n 1
 
 # ---------- Install Node (needed for zip / utils / notifications) ----------
 

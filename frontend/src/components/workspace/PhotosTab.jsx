@@ -1,14 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Image as ImageIcon, X, Clock3, Film, Info } from 'lucide-react';
+import { Image as ImageIcon, X } from 'lucide-react';
 import AILoader from '../ui/AILoader';
 import { getPhotoUrl } from '../../utils/photoClusteringApi';
-import { videoAPI } from '../../utils/videoApi';
-
-const SOURCE_FILTERS = [
-  { id: 'all', label: 'All photos' },
-  { id: 'uploaded', label: 'Uploaded photos' },
-  { id: 'video', label: 'Video-extracted' },
-];
+import { photoAPI } from '../../services/api';
 
 const formatBytes = (bytes) => {
   const n = Number(bytes) || 0;
@@ -17,20 +11,10 @@ const formatBytes = (bytes) => {
   return `${n} B`;
 };
 
-const formatTimestampMs = (ms) => {
-  if (ms === null || ms === undefined) return null;
-  const total = Math.max(0, Math.round(Number(ms) / 1000));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-};
-
 /**
- * Photos tab: backend-derived stats, source filters (all / uploaded /
- * video-extracted) and a preview modal showing the video frame provenance.
+ * Photos tab: event photo gallery with a preview modal.
  */
 const PhotosTab = ({ eventId, refreshKey }) => {
-  const [source, setSource] = useState('all');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -40,68 +24,35 @@ const PhotosTab = ({ eventId, refreshKey }) => {
     setLoading(true);
     setError(null);
     try {
-      const payload = await videoAPI.listPhotosBySource(eventId, source, 1, 120);
+      const payload = await photoAPI.getEventPhotos(eventId, 120, 0);
       setData(payload);
     } catch (err) {
       setError(err.message || 'Failed to load photos');
     } finally {
       setLoading(false);
     }
-  }, [eventId, source]);
+  }, [eventId]);
 
   useEffect(() => {
     load();
   }, [load, refreshKey]);
 
-  const counts = data?.source_counts || { all: 0, uploaded: 0, video: 0 };
-
   return (
     <div>
-      {/* Source filter chips with backend-derived counts */}
-      <div
-        role="tablist"
-        aria-label="Photo source filter"
-        style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}
-      >
-        {SOURCE_FILTERS.map((filter) => {
-          const isActive = source === filter.id;
-          const count = counts[filter.id] ?? 0;
-          return (
-            <button
-              key={filter.id}
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => setSource(filter.id)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '0.45rem 0.95rem',
-                borderRadius: '999px',
-                border: `1px solid ${isActive ? 'var(--ws-accent)' : 'var(--ws-border)'}`,
-                background: isActive ? 'var(--ws-accent-soft)' : '#fff',
-                color: isActive ? 'var(--ws-accent)' : 'var(--ws-text-secondary)',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              {filter.label}
-              <span
-                style={{
-                  background: isActive ? 'var(--ws-accent)' : '#eef0f3',
-                  color: isActive ? '#fff' : 'var(--ws-text-muted)',
-                  borderRadius: '999px',
-                  padding: '0 0.4rem',
-                  fontSize: '0.68rem',
-                  fontWeight: 700,
-                }}
-              >
-                {count}
-              </span>
-            </button>
-          );
-        })}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem' }}>
+        <h3 className="ws-section-title" style={{ margin: 0 }}>Gallery</h3>
+        <span
+          style={{
+            background: '#eef0f3',
+            color: 'var(--ws-text-muted)',
+            borderRadius: '999px',
+            padding: '0 0.45rem',
+            fontSize: '0.7rem',
+            fontWeight: 700,
+          }}
+        >
+          {data?.total ?? 0}
+        </span>
       </div>
 
       {loading ? (
@@ -117,14 +68,8 @@ const PhotosTab = ({ eventId, refreshKey }) => {
       ) : !data?.photos?.length ? (
         <div className="ws-card" style={{ padding: '3rem 1.5rem', textAlign: 'center', color: 'var(--ws-text-muted)' }}>
           <ImageIcon size={40} style={{ opacity: 0.3, marginBottom: '0.75rem' }} />
-          <p style={{ fontWeight: 700, margin: '0 0 0.35rem' }}>
-            {source === 'video' ? 'No video-extracted photos yet' : 'No photos in this view'}
-          </p>
-          <p style={{ fontSize: '0.85rem', margin: 0 }}>
-            {source === 'video'
-              ? 'Use the Videos tab to extract frames from an event video and import them here.'
-              : 'Upload photos or extract video frames to populate the gallery.'}
-          </p>
+          <p style={{ fontWeight: 700, margin: '0 0 0.35rem' }}>No photos yet</p>
+          <p style={{ fontSize: '0.85rem', margin: 0 }}>Upload photos to populate the gallery.</p>
         </div>
       ) : (
         <div
@@ -134,58 +79,34 @@ const PhotosTab = ({ eventId, refreshKey }) => {
             gap: '0.9rem',
           }}
         >
-          {data.photos.map((photo) => {
-            const isVideo = photo.source_video_id !== null && photo.source_video_id !== undefined;
-            const ts = formatTimestampMs(photo.source_timestamp_ms);
-            return (
-              <button
-                key={photo.id}
-                onClick={() => setPreview(photo)}
-                aria-label={`Preview photo ${photo.original_filename || photo.id}`}
-                style={{
-                  position: 'relative',
-                  border: '1px solid var(--ws-border)',
-                  borderRadius: 'var(--ws-radius)',
-                  overflow: 'hidden',
-                  background: '#f1f2f4',
-                  padding: 0,
-                  cursor: 'pointer',
-                }}
-              >
-                <img
-                  src={getPhotoUrl(photo.file_path, false, photo.storage_type)}
-                  alt={photo.original_filename || `Photo ${photo.id}`}
-                  loading="lazy"
-                  style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }}
-                  onError={(e) => { e.currentTarget.style.opacity = 0.25; }}
-                />
-                {isVideo && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      left: '0.45rem',
-                      top: '0.45rem',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.3rem',
-                      background: 'rgba(79, 70, 229, 0.9)',
-                      color: '#fff',
-                      borderRadius: '6px',
-                      padding: '0.15rem 0.4rem',
-                      fontSize: '0.62rem',
-                      fontWeight: 700,
-                    }}
-                  >
-                    <Film size={10} /> {ts || 'Video'}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+          {data.photos.map((photo) => (
+            <button
+              key={photo.id}
+              onClick={() => setPreview(photo)}
+              aria-label={`Preview photo ${photo.original_filename || photo.id}`}
+              style={{
+                position: 'relative',
+                border: '1px solid var(--ws-border)',
+                borderRadius: 'var(--ws-radius)',
+                overflow: 'hidden',
+                background: '#f1f2f4',
+                padding: 0,
+                cursor: 'pointer',
+              }}
+            >
+              <img
+                src={getPhotoUrl(photo.file_path, false, photo.storage_type)}
+                alt={photo.original_filename || `Photo ${photo.id}`}
+                loading="lazy"
+                style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }}
+                onError={(e) => { e.currentTarget.style.opacity = 0.25; }}
+              />
+            </button>
+          ))}
         </div>
       )}
 
-      {/* Preview modal with source provenance */}
+      {/* Preview modal */}
       {preview && (
         <div
           role="dialog"
@@ -212,23 +133,8 @@ const PhotosTab = ({ eventId, refreshKey }) => {
                 <div style={{ fontWeight: 700, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {preview.original_filename || `Photo #${preview.id}`}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--ws-text-muted)', display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.2rem' }}>
-                  <span>{formatBytes(preview.file_size)}</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                    {preview.source_video_id !== null && preview.source_video_id !== undefined ? (
-                      <>
-                        <Film size={12} />
-                        Extracted from video #{preview.source_video_id}
-                        {preview.source_timestamp_ms !== null && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <Clock3 size={12} /> at {formatTimestampMs(preview.source_timestamp_ms)}
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      <><ImageIcon size={12} /> Uploaded photo</>
-                    )}
-                  </span>
+                <div style={{ fontSize: '0.75rem', color: 'var(--ws-text-muted)', marginTop: '0.2rem' }}>
+                  {formatBytes(preview.file_size)}
                 </div>
               </div>
               <button className="ws-btn ws-btn--ghost" aria-label="Close preview" onClick={() => setPreview(null)}>
@@ -242,12 +148,6 @@ const PhotosTab = ({ eventId, refreshKey }) => {
                 style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
               />
             </div>
-            {preview.source_video_id !== null && preview.source_video_id !== undefined && (
-              <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--ws-border)', background: '#fafbfc', display: 'flex', gap: '0.6rem', alignItems: 'center', fontSize: '0.78rem', color: 'var(--ws-text-secondary)' }}>
-                <Info size={14} style={{ color: 'var(--ws-accent)', flexShrink: 0 }} />
-                Person grouping must be re-run by the organizer for new video photos to appear in People.
-              </div>
-            )}
           </div>
         </div>
       )}

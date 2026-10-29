@@ -1,3 +1,0 @@
-# Agent instructions
-
-@RTK.md

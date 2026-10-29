@@ -265,15 +265,12 @@ export const attendeeAPI = {
     },
 
     /**
-     * Get attendee's matched photos
+     * Get only the photos the attendee's face was matched in
      */
-    getPhotos: async (attendeeId, eventId, includeAllEventPhotos = false) => {
+    getPhotos: async (attendeeId, eventId) => {
         const queryParams = new URLSearchParams();
         if (eventId) {
             queryParams.set('event_id', eventId);
-        }
-        if (includeAllEventPhotos) {
-            queryParams.set('include_all_event_photos', 'true');
         }
         const params = queryParams.toString() ? `?${queryParams.toString()}` : '';
         return apiCall(`/attendees/${attendeeId}/photos${params}`);
@@ -453,6 +450,13 @@ export const photoAPI = {
      */
     getFolderPhotos: async (folderId, eventId, folderName) => {
         return apiCall(`/photos/folders/${folderName}/photos?event_id=${eventId}`);
+    },
+
+    /**
+     * Get an event's photos (paginated, newest first)
+     */
+    getEventPhotos: async (eventId, limit = 60, offset = 0) => {
+        return apiCall(`/photos/event?event_id=${eventId}&limit=${limit}&offset=${offset}`);
     },
 
     /**

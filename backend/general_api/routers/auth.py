@@ -490,7 +490,7 @@ async def send_invitations(
             event_name,
             event_id,
             FRONTEND_URL,
-            qr_code_path,
+            qr_code_path or "",
         )
         count += 1
 

@@ -18,7 +18,6 @@ os.environ['ALBUMENTATIONS_DISABLE_VERSION_CHECK'] = '1'
 from general_api.routers import auth, events, photos, organizer, photographer
 from general_api.routers import attendees as general_attendees
 from general_api.routers import clustering as general_clustering
-from general_api.routers import videos as general_videos
 from general_api.auth_utils import SessionAuthMiddleware, ensure_auth_schema
 from config import API_TITLE, API_VERSION, UPLOADS_DIR, DOWNLOADS_DIR, BANNERS_DIR, FRONTEND_URL
 
@@ -140,79 +139,9 @@ app.include_router(events.router)
 app.include_router(photos.router)
 app.include_router(general_attendees.router)
 app.include_router(general_clustering.router)
-app.include_router(general_videos.router)
 app.include_router(organizer.router)
 app.include_router(photographer.router)
 
-
-def _apply_versioned_migrations() -> None:
-    """Apply migrations/*.sql to existing databases in order, recorded in
-    schema_migrations so volumes created before this feature (docker may
-    only initialize SQL into a fresh volume) still receive the change
-    without deleting data."""
-    import glob as _glob
-    from general_api.database import execute_query, execute_update_safely, execute_update
-
-    def _table_exists(table: str) -> bool:
-        rows = execute_query(
-            "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = %s",
-            (table,),
-        )
-        return bool(rows)
-
-    try:
-        execute_update_safely(
-            "CREATE TABLE IF NOT EXISTS schema_migrations ("
-            "name VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-        )
-        if not _table_exists('schema_migrations'):
-            logger.error("schema_migrations could not be created; skipping migrations.")
-            return
-        migrations_root = os.path.join(backend_dir, "migrations")
-        applied_rows = execute_query("SELECT name FROM schema_migrations") or []
-        applied = {row["name"] for row in applied_rows}
-        for sql_path in sorted(_glob.glob(os.path.join(migrations_root, "*.sql"))):
-            name = os.path.basename(sql_path)
-            if name in applied:
-                continue
-            logger.info("Applying migration %s...", name)
-            with open(sql_path, "r", encoding="utf-8") as handle:
-                sql = handle.read()
-            statements = [s.strip() for s in sql.split(";") if s.strip()]
-            errors = 0
-            for statement in statements:
-                try:
-                    execute_update_safely(statement)
-                except Exception as stmt_error:  # each statement idempotent
-                    errors += 1
-                    logger.warning("Statement in %s: %s", name, stmt_error)
-            if errors == 0:
-                execute_update(
-                    "INSERT INTO schema_migrations (name) VALUES (%s)", (name,)
-                )
-                logger.info("Migration %s applied.", name)
-            else:
-                logger.error("Migration %s had %s failing statement(s); not recorded. "
-                             "They will retry on next startup.", name, errors)
-    except Exception as e:
-        logger.error("Versioned migration runner failed: %s", e)
-
-
-@app.on_event("startup")
-def startup_video_services():
-    """Apply the video-feature migration, clean up + flag interrupted
-    extraction jobs explicitly retryable, and start the bounded worker."""
-    try:
-        _apply_versioned_migrations()
-        from general_api.services import video_worker
-        recovery = video_worker.recover_interrupted_jobs()
-        if recovery.get("jobs_recovered"):
-            logger.info("Video job recovery: %s", recovery)
-        if os.getenv("VIDEO_WORKER_ENABLED", "1").strip().lower() not in {"0", "false", "no"}:
-            video_worker.get_or_create_worker().start()
-            logger.info("Video-to-photo worker started.")
-    except Exception as e:
-        logger.error("Video services startup failed: %s", e)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

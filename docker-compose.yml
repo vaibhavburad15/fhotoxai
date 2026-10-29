@@ -41,12 +41,6 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: digitalnexusai_emc_db
-      # ---- Video-to-Photo feature (application limits; see docs/VIDEO_TO_PHOTO.md)
-      VIDEO_MAX_UPLOAD_MB: "250"
-      VIDEO_MAX_DURATION_SEC: "300"
-      VIDEO_MAX_CANDIDATE_FRAMES: "300"
-      VIDEO_MAX_CONCURRENT_JOBS: "1"
-      VIDEO_WORKER_ENABLED: "1"
     ports:
       - "3002:3001"
     volumes:

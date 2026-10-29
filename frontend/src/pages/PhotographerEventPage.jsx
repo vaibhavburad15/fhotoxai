@@ -2,14 +2,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
     CheckCircle, FolderOpen, Image as ImageIcon, Clock, MapPin, Calendar,
-    UploadCloud, Trash2, Eye, Users, X, AlertTriangle, Layers, Film,
+    UploadCloud, Trash2, Eye, Users, X, AlertTriangle, Layers,
     AlertCircle,
 } from 'lucide-react';
 import '../landing.css';
 import '../styles/workspace.css';
 import AILoader from '../components/ui/AILoader';
 import PhotosTab from '../components/workspace/PhotosTab';
-import VideoWorkflow from '../components/workspace/VideoWorkflow';
 import {
     eventAPI, photoAPI, API_BASE, AUTH_EXPIRED_EVENT, clearStoredAuth, trainingAPI,
 } from '../services/api';
@@ -17,7 +16,6 @@ import { useToast } from '../context/ToastContext';
 
 const TABS = [
     { id: 'photos', label: 'Photos', icon: ImageIcon },
-    { id: 'videos', label: 'Videos', icon: Film },
     { id: 'people', label: 'People', icon: Users },
 ];
 
@@ -367,7 +365,7 @@ const PhotographerEventPage = () => {
                                 <div className="ws-card" style={{ padding: '1rem 1.25rem', background: 'var(--ws-success-soft)', border: '1px solid #a7f3d0', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
                                     <CheckCircle size={20} style={{ color: 'var(--ws-success)', flexShrink: 0, marginTop: 2 }} />
                                     <div style={{ fontSize: '0.85rem', color: '#065f46', lineHeight: 1.5 }}>
-                                        <strong>Upload finalized.</strong> Upload, delete and video import are disabled for this event.
+                                        <strong>Upload finalized.</strong> Upload and delete are disabled for this event.
                                     </div>
                                 </div>
                             )}
@@ -409,7 +407,7 @@ const PhotographerEventPage = () => {
                             )}
                         </div>
 
-                        {/* Gallery with source filters */}
+                        {/* Gallery */}
                         <PhotosTab eventId={eventId} refreshKey={galleryVersion} />
 
                         {/* Upload history */}
@@ -491,14 +489,6 @@ const PhotographerEventPage = () => {
                     </div>
                 )}
 
-                {activeTab === 'videos' && (
-                    <VideoWorkflow
-                        eventId={eventId}
-                        uploadFinalized={uploadFinalized}
-                        onGalleryChanged={() => setGalleryVersion(v => v + 1)}
-                    />
-                )}
-
                 {activeTab === 'people' && (
                     <div>
                         {metricsLoading ? (
@@ -534,8 +524,8 @@ const PhotographerEventPage = () => {
                                     <div style={{ fontSize: '0.85rem', color: 'var(--ws-text-secondary)', lineHeight: 1.55 }}>
                                         <strong style={{ display: 'block', color: 'var(--ws-text)' }}>Clustering runs from the organizer dashboard</strong>
                                         Photo grouping is started by the organizer through the existing workflow
-                                        (Organizer Dashboard → Clustering). Importing video photos marks the event
-                                        as needing an update but never rebuilds existing groups automatically.
+                                        (Organizer Dashboard → Clustering). Newly uploaded photos appear in People
+                                        after the organizer re-runs clustering.
                                     </div>
                                 </div>
                                 <a
@@ -587,7 +577,7 @@ const PhotographerEventPage = () => {
                         </div>
                         <div style={{ padding: '1.5rem' }}>
                             <div style={{ background: 'var(--ws-danger-soft)', border: '1px solid #fca5a5', borderRadius: 12, padding: '1rem', marginBottom: '1rem', fontSize: '0.88rem', color: '#991b1b', lineHeight: 1.6 }}>
-                                Once finalized you can no longer upload or delete photos or videos for this event. This cannot be undone.
+                                Once finalized you can no longer upload or delete photos for this event. This cannot be undone.
                             </div>
                             <p style={{ fontSize: '0.9rem', color: 'var(--ws-text-secondary)', lineHeight: 1.6, margin: 0 }}>
                                 Finalize uploads for <strong style={{ color: 'var(--ws-text)' }}>{event?.name}</strong>?

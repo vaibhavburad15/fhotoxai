@@ -1,70 +1,103 @@
-# Local Run and Login Guide
+Commands And Login Guide
+Project Root
+cd C:\photo-clustering\ai-vision-architecture
+Backend Commands
+1. Activate virtual environment
+.venv\Scripts\Activate.ps1
+2. Install backend dependencies
+python -m pip install -r backend\requirements.txt
+3. Run General API
+cd backend
+python -m uvicorn general_api.main:app --host 0.0.0.0 --port 3001
+General API URL:
 
-## Start the full project
+http://127.0.0.1:3001
+4. Run AI API
+Open a second terminal:
 
-The project uses Docker Compose for PostgreSQL and both backend APIs. Start Docker Desktop first and wait until its engine is running.
+cd C:\photo-clustering\ai-vision-architecture
+.venv\Scripts\Activate.ps1
+cd backend
+python -m uvicorn ai_api.main:app --host 0.0.0.0 --port 5001
+AI API URL:
 
-In PowerShell, start the database and APIs from the project root:
+http://127.0.0.1:5001
+5. Optional bash helper
+If you are using Git Bash / Linux shell, the repo also has:
 
-```powershell
-cd "C:\Huzaifa Degree\Final Year Project\fhotoxai"
-docker compose up --build -d
-docker compose ps
-```
+cd backend
+./start.sh
+Frontend Commands
+1. Install frontend dependencies
+cd C:\photo-clustering\ai-vision-architecture\frontend
+npm install
+2. Run frontend
+cd C:\photo-clustering\ai-vision-architecture\frontend
+npm run dev
+Frontend URL:
 
-The first startup downloads and builds the service images and can take several minutes. Wait until `db`, `general-api`, and `ai-api` show as running. Compose reads `compose.override.yaml` automatically for local settings.
+http://localhost:5173
+3. Build frontend
+cd C:\photo-clustering\ai-vision-architecture\frontend
+npm run build
+Main URLs
+Frontend:           http://localhost:5173
+General API:        http://127.0.0.1:3001
+AI API:             http://127.0.0.1:5001
+Organizer Login:    http://localhost:5173/organizer/login
+Organizer Register: http://localhost:5173/organizer/register
+Photographer Login: http://localhost:5173/photographer/login
+Photographer Register: http://localhost:5173/photographer/register
+Attendee Login:     http://localhost:5173/attendee/login
+Attendee Register:  http://localhost:5173/attendee-registration
+Login Credentials
+Organizer
+Current live database account found on this machine:
 
-Open a second PowerShell window and start the frontend:
-
-```powershell
-cd "C:\Huzaifa Degree\Final Year Project\fhotoxai\frontend"
-npm.cmd install
-npm.cmd run dev -- --host 0.0.0.0
-```
-
-Open the frontend at <http://localhost:5173/>. Keep both PowerShell windows open while using the app.
-
-| Service | Local address |
-| --- | --- |
-| Frontend | <http://localhost:5173/> |
-| General API | <http://localhost:3002/> |
-| AI API | <http://localhost:5001/> |
-| PostgreSQL | `localhost:5432` |
-
-The Vite frontend proxies `/api` to the general API and `/ai-api` to the AI API. The API and database services must be running for login, event, upload, and gallery features.
-
-To stop the backend services, run this from the project root:
-
-```powershell
-docker compose down
-```
-
-This keeps the local database volume. Avoid `docker compose down -v` if you need to preserve its data.
-
-## Login details
-
-### Organizer
-
-The existing local demo account documented for this machine is:
-
-```text
 Email: test@test.com
+Role: organizer
+Status: active
 Password: test123
-Login: http://localhost:5173/organizer/login
-```
+Working organizer login options:
 
-If this account is not present in a freshly initialized database, create an organizer at <http://localhost:5173/organizer/register>, then sign in with that account.
+Use an existing organizer account if you already know its password.
+Create a new organizer from:
+http://localhost:5173/organizer/register
+Then log in with the same email and password at:
 
-### Photographer
+http://localhost:5173/organizer/login
+Photographer
+There is no fixed hardcoded photographer password in the current code.
 
-There is no fixed photographer demo password. Create an account at <http://localhost:5173/photographer/register>, then use the same email and password at <http://localhost:5173/photographer/login>.
+Create a photographer account from:
 
-### Attendee
+http://localhost:5173/photographer/register
+Then log in with the same email and password at:
 
-Attendees use email verification rather than a fixed demo password. Register at <http://localhost:5173/attendee-registration> and continue through <http://localhost:5173/attendee/access>. In local demo mode, if email delivery is unavailable, the API may return an `otp_hint` for testing.
+http://localhost:5173/photographer/login
+Attendee
+Attendees do not use a fixed password.
 
-## Troubleshooting
+Flow:
 
-- If Compose reports that it cannot connect to the Docker API, open Docker Desktop and wait for the engine to finish starting, then retry `docker compose up --build -d`.
-- If a frontend request fails, check service status with `docker compose ps` and API logs with `docker compose logs general-api ai-api`.
-- If port 5173 is already in use, stop the other Vite process or use the alternate URL printed by Vite.
+Register as attendee from:
+http://localhost:5173/attendee-registration
+Login from:
+http://localhost:5173/attendee/login
+Use email + OTP.
+Dev note:
+
+If email sending fails, backend /auth/send-otp returns an otp_hint in demo mode.
+
+Useful API Login Endpoints
+POST /auth/register
+POST /auth/login
+POST /auth/send-otp
+POST /auth/verify-otp
+POST /auth/verify-attendee
+Recommended Startup Order
+Start PostgreSQL / database first.
+Start General API on port 3001.
+Start AI API on port 5001.
+Start frontend on port 5173.
+Open frontend login page and sign in.

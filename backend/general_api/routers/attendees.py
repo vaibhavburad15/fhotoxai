@@ -45,6 +45,34 @@ def _write_local_file(path: str, content: bytes) -> None:
         output_file.write(content)
 
 
+def _get_matched_photos(cluster_id: Optional[int], event_id: Optional[int]) -> List[dict]:
+    """Distinct photos containing the attendee's face cluster, newest first."""
+    if not cluster_id:
+        return []
+    rows = execute_query(
+        """
+        SELECT p.id AS photo_id, p.file_path AS photo_url, p.storage_type
+        FROM photos p
+        WHERE EXISTS (
+            SELECT 1 FROM faces f
+            WHERE f.photo_id = p.id AND f.person_cluster_id = %s
+        )
+          AND (%s IS NULL OR p.event_id = %s)
+        ORDER BY p.upload_date DESC, p.id DESC
+        """,
+        (cluster_id, event_id, event_id),
+    )
+    return [
+        {
+            "id": row["photo_id"],
+            "photo_id": row["photo_id"],
+            "photo_url": _normalize_photo_path(row["photo_url"]),
+            "storage_type": row.get("storage_type") or "local",
+        }
+        for row in rows or []
+    ]
+
+
 def _assert_photo_download_access(current_user: dict, photo_ids: List[int]) -> None:
     if current_user.get("role") == "admin":
         return
@@ -53,19 +81,30 @@ def _assert_photo_download_access(current_user: dict, photo_ids: List[int]) -> N
     if not unique_photo_ids:
         raise HTTPException(status_code=400, detail="photo_ids are required.")
 
+    # Attendees may download photos they uploaded or photos their face was matched in.
     placeholders = ", ".join(["%s"] * len(unique_photo_ids))
     query = f"""
         SELECT DISTINCT p.id
         FROM photos p
-        JOIN attendees a ON a.id = p.attendee_id
         JOIN users u ON u.id = %s
-        WHERE p.id IN ({placeholders})
-          AND (
+        JOIN attendees a ON (
               a.user_id = u.id
               OR (
                   a.user_id IS NULL
                   AND a.email IS NOT NULL
                   AND LOWER(a.email) = LOWER(u.email)
+              )
+          )
+        WHERE p.id IN ({placeholders})
+          AND (
+              p.attendee_id = a.id
+              OR (
+                  a.cluster_id IS NOT NULL
+                  AND p.event_id = a.event_id
+                  AND EXISTS (
+                      SELECT 1 FROM faces f
+                      WHERE f.photo_id = p.id AND f.person_cluster_id = a.cluster_id
+                  )
               )
           )
     """
@@ -280,7 +319,7 @@ async def get_my_events(
             if cluster_id:
                 matched_rows = execute_query(
                     """
-                    SELECT COUNT(*) AS count
+                    SELECT COUNT(DISTINCT p.id) AS count
                     FROM faces f
                     JOIN photos p ON p.id = f.photo_id
                     WHERE f.person_cluster_id = %s
@@ -379,10 +418,9 @@ async def get_my_events(
 async def get_attendee_photos(
     attendee_id: int,
     event_id: Optional[int] = None,
-    include_all_event_photos: bool = False,
     current_user: dict = Depends(require_roles("attendee")),
 ):
-    """Get photos for an attendee via face matching (linked cluster)"""
+    """Get only the photos the attendee's face was matched in (linked cluster)"""
     try:
         assert_attendee_access(current_user, attendee_id, event_id)
         attendee = execute_query("SELECT cluster_id, event_id FROM attendees WHERE id = %s", (attendee_id,))
@@ -392,57 +430,15 @@ async def get_attendee_photos(
         attendee_event_id = attendee[0].get('event_id')
         effective_event_id = event_id if event_id is not None else attendee_event_id
         cluster_id = attendee[0].get('cluster_id') or _resolve_attendee_cluster(attendee_id)
-        faces = []
+        faces = _get_matched_photos(cluster_id, effective_event_id)
 
-        if include_all_event_photos:
-            if effective_event_id is None:
-                raise HTTPException(status_code=400, detail="Event ID is required to fetch event photos")
-
-            event_photo_rows = execute_query(
-                """
-                SELECT p.id AS photo_id, p.file_path AS photo_url, p.storage_type
-                FROM photos p
-                WHERE p.event_id = %s
-                ORDER BY p.upload_date DESC, p.id DESC
-                """,
-                (effective_event_id,),
-            )
-
-            for row in event_photo_rows:
-                faces.append(
-                    {
-                        "id": row["photo_id"],
-                        "photo_id": row["photo_id"],
-                        "photo_url": _normalize_photo_path(row["photo_url"]),
-                        "storage_type": row.get("storage_type") or "local",
-                    }
-                )
-
-            return {
-                "status": "success",
-                "faces": faces,
-                "total": len(faces),
-                "mode": "event_gallery",
-                "event_id": effective_event_id,
-            }
-
-        if cluster_id:
-            query = """
-                SELECT f.id, p.file_path as photo_url, p.storage_type
-                FROM faces f 
-                JOIN photos p ON f.photo_id = p.id 
-                WHERE f.person_cluster_id = %s
-                  AND (%s IS NULL OR p.event_id = %s)
-            """
-            results = execute_query(query, (cluster_id, effective_event_id, effective_event_id))
-            for row in results:
-                faces.append({
-                    "id": row["id"],
-                    "photo_url": _normalize_photo_path(row["photo_url"]),
-                    "storage_type": row.get("storage_type") or "local"
-                })
-        
-        return {"status": "success", "faces": faces, "total": len(faces)}
+        return {
+            "status": "success",
+            "faces": faces,
+            "total": len(faces),
+            "matched": cluster_id is not None,
+            "event_id": effective_event_id,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -469,19 +465,26 @@ async def get_attendee_highlight_reel(
         faces = []
 
         if cluster_id:
+            # Best face per photo, so a photo appears at most once in the reel.
             query = """
-                SELECT f.id, p.file_path as photo_url, p.storage_type, f.quality_score
-                FROM faces f 
-                JOIN photos p ON f.photo_id = p.id 
-                WHERE f.person_cluster_id = %s
-                  AND (%s IS NULL OR p.event_id = %s)
-                ORDER BY f.quality_score DESC NULLS LAST
+                SELECT photo_id, photo_url, storage_type, quality_score
+                FROM (
+                    SELECT DISTINCT ON (p.id)
+                        p.id AS photo_id, p.file_path AS photo_url, p.storage_type, f.quality_score
+                    FROM faces f
+                    JOIN photos p ON f.photo_id = p.id
+                    WHERE f.person_cluster_id = %s
+                      AND (%s IS NULL OR p.event_id = %s)
+                    ORDER BY p.id, f.quality_score DESC NULLS LAST
+                ) best
+                ORDER BY quality_score DESC NULLS LAST
                 LIMIT %s
             """
             results = execute_query(query, (cluster_id, effective_event_id, effective_event_id, limit))
             for row in results:
                 faces.append({
-                    "id": row["id"],
+                    "id": row["photo_id"],
+                    "photo_id": row["photo_id"],
                     "photo_url": _normalize_photo_path(row["photo_url"]),
                     "storage_type": row.get("storage_type") or "local",
                     "quality_score": row.get("quality_score")
@@ -557,18 +560,19 @@ async def get_photos_with(
             return {"status": "success", "faces": []}
 
         query = """
-            SELECT f1.id, p.file_path as photo_url, p.storage_type
-            FROM faces f1
-            JOIN faces f2 ON f1.photo_id = f2.photo_id
-            JOIN photos p ON f1.photo_id = p.id
-            WHERE f1.person_cluster_id = %s
-              AND f2.person_cluster_id = %s
+            SELECT p.id AS photo_id, p.file_path AS photo_url, p.storage_type
+            FROM photos p
+            WHERE p.event_id = %s
+              AND EXISTS (SELECT 1 FROM faces f WHERE f.photo_id = p.id AND f.person_cluster_id = %s)
+              AND EXISTS (SELECT 1 FROM faces f WHERE f.photo_id = p.id AND f.person_cluster_id = %s)
+            ORDER BY p.upload_date DESC, p.id DESC
         """
-        results = execute_query(query, (cluster_id, other_cluster_id))
+        results = execute_query(query, (attendee[0].get('event_id'), cluster_id, other_cluster_id))
         faces = []
         for row in results:
             faces.append({
-                "id": row["id"],
+                "id": row["photo_id"],
+                "photo_id": row["photo_id"],
                 "photo_url": _normalize_photo_path(row["photo_url"]),
                 "storage_type": row.get("storage_type") or "local"
             })
@@ -634,7 +638,7 @@ async def upload_attendee_photos(
         
         for file in files:
             try:
-                ext = os.path.splitext(file.filename)[1].lower()
+                ext = os.path.splitext(file.filename or "")[1].lower()
                 if ext not in ['.jpg', '.jpeg', '.png', '.webp']:
                     failed_count += 1
                     continue

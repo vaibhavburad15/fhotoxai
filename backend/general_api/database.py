@@ -128,7 +128,7 @@ def _register_pgvector(conn):
             pass  # extension may not be installed in this DB yet
 
 
-def execute_query(query: str, params: tuple = None) -> Optional[List[Dict[str, Any]]]:
+def execute_query(query: str, params: tuple = None) -> List[Dict[str, Any]]:
     """
     Execute a SELECT query and return results as list of dictionaries
     """
